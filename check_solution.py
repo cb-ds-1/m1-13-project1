@@ -1,5 +1,9 @@
 import math
 
+
+def distance(x1, y1, x2, y2):
+    return math.hypot(x2 - x1, y2 - y1)
+
 def check_solution(travel_list, df, speed=30.):
     """
     Check a bank robber algorithm solution
@@ -25,7 +29,7 @@ def check_solution(travel_list, df, speed=30.):
         row = df.iloc[e]
         score += row['money']
         t_remaining -= row['time (hr)']
-        dist = math.hypot(
+        dist = distance(
             row['x_coordinate'], row['y_coordinate'],
             df.iloc[prev]['x_coordinate'],
             df.iloc[prev]['y_coordinate'],
@@ -36,7 +40,7 @@ def check_solution(travel_list, df, speed=30.):
         f"Used more than 24h! Time left: {t_remaining}"
     )
     # still gotta get to (0, 0)
-    dist = math.hypot(row['x_coordinate'],row['y_coordinate'],0,0)
+    dist = distance(row['x_coordinate'],row['y_coordinate'],0,0)
     final_t = t_remaining - (dist / speed)
     assert final_t >= 0, (
         f"Not enough time to get to helicopter!\n"
