@@ -29,7 +29,7 @@ You have **24 hours** to make as much money as possible then escape.
 - You travel between banks at 30 km/h. You have to travel from one bank to the next!
     - Remember the formula to calculate the distance between two points.
     - The coordinates are in kilometers.
-        - So (1, 1) and (2, 2) are one kilometer apart. 
+        - So (1, 1) and (1, 2) are one kilometer apart. 
         - This would take 1 / 30 hour = 2 minutes to travel
 
 - Your solution should be an approximative/heuristic algorithm
@@ -56,6 +56,10 @@ robber_algorithm(df)
 # Output is a list of bank IDs
 [OUTPUT] --> [664, 2341, 26, 998, 9583, 24, 1, 444, 6783]
 ```
+
+# Checking Your Solution:
+
+You can use the `check_solution` function from `check_solution.py` to test if your solution is valid and verify the score.
 
 # Hints:
 
