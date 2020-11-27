@@ -1,4 +1,5 @@
 import math
+import pandas as pd 
 
 
 def distance(x1, y1, x2, y2):
@@ -49,3 +50,4 @@ def check_solution(travel_list, df, speed=30.):
     )
     print(f"Time Remaining: {final_t}")
     return score
+
