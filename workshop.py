@@ -6,7 +6,7 @@ from itertools import combinations
 import os, platform, subprocess, re
 import multiprocessing
 import concurrent.futures
-
+from check_solution import check_solution
 
 
 
@@ -138,7 +138,7 @@ time_threshold_for_edge_to_be_considered = 0.5
 # to consider them. mean_money_factor_modifier is the step-up value
 # we use at each iteration optimization. these are in km.
 mean_money_factor=2.9
-mean_money_factor_modifier=0.05
+mean_money_factor_modifier=0.03
 # C
 # The factor by which we multiply the mean of the values of time
 # it takes to rob a bank in order to get the min threshold to 
@@ -146,13 +146,17 @@ mean_money_factor_modifier=0.05
 # we are with our options. mean_time_factor_modifier is the step-up value
 # we use at each iteration optimization. these are in h (hour).
 mean_time_factor=0.5
-mean_time_factor_modifier=0.025
+mean_time_factor_modifier=0.014
+# Max number of starting points to assign to each process
+max_starting_points_per_process=2
 # D
-max_number_banks_we_can_consider=18
-#in h
+def max_number_of_banks_to_consider():
+    return int(float(ideal_number_of_processes()) * max_starting_points_per_process)
+# in h
 maximum_amount_of_time_for_any_given_path=24.0
 # Im km/h
 speed_at_which_we_travel_between_banks=30
+
 
 """
 a and b: [tuple(x, y)]: cartesian coordinates of two points
@@ -200,9 +204,20 @@ def ideal_number_of_processes():
     if count <= 2: return 2
     return count - 1
 
-
+"""
+Spreads out the starting points from the origin across the number of processes
+we'll be creating
+lst: the list of neighbors to the origin
+into: (Optional) int
+"""
 def split_list_for_multiprocess(lst, into=ideal_number_of_processes()):
-    return list(chunks(lst, into))
+    lstC = lst.copy()
+    result = [[] for _ in range(into)]
+    counter = 0
+    while len(lstC) > 0:
+        result[counter].append(lstC.pop(0))
+        counter = 0 if counter == into - 1 else counter + 1
+    return result
 
 
 def groups_to_split_origin_neighbors_into(size_batch):
@@ -325,18 +340,17 @@ class Graph:
         """
         neighs = neighs_arg if neighs_arg is not None else self.neighbors_of_origin()
         results_sublists = []
-        print(len(neighs), "neighbors to origin")
+        # print(len(neighs), "neighbors to origin")
         print("The exit helicopter zone can be reached from {neig} neighboring banks".format(neig=len(neighs)))
         divided_neighbors = split_list_for_multiprocess(
-            neighs,
-            groups_to_split_origin_neighbors_into(len(neighs))
+            neighs
         )
-        print("Spliting up the neighbors into groups of {spli}".format(spli=groups_to_split_origin_neighbors_into(len(neighs))))
-        print("These are the divided neighbors to origin:")
+        # print("Spliting up the neighbors into groups of {spli}".format(spli=groups_to_split_origin_neighbors_into(len(neighs))))
+        print("These are the divided neighbors to origin accross {cpus} processes:".format(cpus=ideal_number_of_processes()))
         print(divided_neighbors)
+        print("And we have {edges} edges to evaluate".format(edges=len(self.G.edges)))
         print(" ")
         print("Traversing our graph accross {cpus} processes....".format(cpus=ideal_number_of_processes()))
-
         def update_counts():
             self.completed += 1
             print("Done {comp}/{tots}".format(comp=self.completed,tots=len(neighs)))
@@ -459,12 +473,21 @@ def sort_paths_by_sum_robbed(paths):
 def return_best_path_of_banks(paths):
     sort_paths_by_sum_robbed(paths)
     first = paths[0][0].split('-')[1:]
+    sum_money = paths[0][1]
+    print("total money robbed", sum_money)
+
     # We rebuild the array of integers from the reversed array of strings
     # since we started our path analyses from the extraction point
     return [int(i) for i in first][::-1]
 
 """
+input:
+------
 df: [string]: path to the file
+
+output:
+-------
+result: [df: Dataframe, path: int[]]
 """
 def robber_algorithm(path):
 
@@ -473,10 +496,16 @@ def robber_algorithm(path):
     determine_edges_to_origin(df)
     graph = Graph()
 
+    print("The maximum number of neigboring banks", 
+        "to the origin that can consider in 3 minutes is:",
+        max_number_of_banks_to_consider()
+    )
+    
+
+
     def optimize_factors():
         global mean_time_factor
         global mean_money_factor
-        global max_number_banks_we_can_consider
         to_use = filter_out_banks_with_means(
             df
         )
@@ -484,15 +513,15 @@ def robber_algorithm(path):
         iterate_and_apply_valid_edges(to_use, df, graph)
         # Where we check to see if our pool of banks meets our boundaris to be able to
         # complete this analysis in under 3 minutes
-        if len(graph.neighbors_of_origin()) < max_number_banks_we_can_consider: return
+        if len(graph.neighbors_of_origin()) < max_number_of_banks_to_consider(): return
         else:
             print("Optimizing our selection criteria to narrow our options..")
             print(" ")
             print(" ")
             print(" ")
             print(" ")
-            mean_time_factor -= 0.025
-            mean_money_factor += 0.05
+            mean_time_factor -= mean_time_factor_modifier
+            mean_money_factor += mean_money_factor_modifier
             graph.new_graph()
             return optimize_factors()
 
@@ -503,7 +532,10 @@ def robber_algorithm(path):
     result = return_best_path_of_banks(paths)
     print("The ideal path would be :")
     print(result)
+    print("Checking result..")
+    return result
 
+path_to_file='bank_data.csv'
+result=robber_algorithm(path_to_file)
+check_solution(result, pd.read_csv(path_to_file), speed_at_which_we_travel_between_banks)
 
-robber_algorithm('bank_data.csv')
-# print(path)

@@ -41,6 +41,7 @@ def check_solution(travel_list, df, speed=30.):
     )
     # still gotta get to (0, 0)
     dist = distance(row['x_coordinate'],row['y_coordinate'],0,0)
+    print(t_remaining)
     final_t = t_remaining - (dist / speed)
     assert final_t >= 0, (
         f"Not enough time to get to helicopter!\n"
