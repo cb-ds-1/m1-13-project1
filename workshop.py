@@ -19,6 +19,12 @@ As a bank robber, we want to ensure four things:
 4) point 3 because more banks robbed is likelier to maximize
    our profits than traveling a greater distance in 24hrs
 
+Algorithmically we want to ensure the following:
+ - that the algorithm returns a value within 3 minutes
+ - that a value is returned by assuming the device computing
+   the algorithm is a commercial laptop (so 4-6 core CPU),
+   with no dedicated GPU.
+
 To satisfy:
 1) we should calculate FROM the endpoint (the origin)
 2 - 4) 
@@ -34,23 +40,119 @@ To satisfy:
     - given these conditions, this will also cut away banks that take too long
       to travel to the origin from, meaning, it will further weed out end-of-day
       banks, further reducing the number of potential robbery targets
+
+
+DESCRIPTION OF ASSUMPTIONS AND CONVENTIONS TO TAKE
+
+- Since we are operating under the assumption that the device is a 4-6 core CPU,
+  we can assume it will likely have 12 threads at most. 
+- so as to not freeze the device on the machine, we will make sure 2 threads remain free
+  for other tasks running on the device
+- this means we need to consider how many possible paths we can evaluate for time and money
+  given that we might have a low thread count to utilize
+- the simplest approach to solving this logistical issue is to take an Optimization approach
+- we will optimize our list of possible banks according to three consideration variableS:
+    A: how long we're willing to spend travelling from bank to bank (weight of an edge)
+    B: how much time we're willing to spend at a bank to rob it
+    C: the minimum amount a bank must have in order for us to consider robbing it 
+- what we will do is iterate over smaller and smaller filtered out results of the list of banks
+  with these three factors being our filtering variables
+- at each iteration, we will check how many banks remain
+- Since we are operating under the assumption that we do not have a speed-efficient CPU on hand:
+    - we will set an arbitrary value of maximum banks we need to filter down to before running our analysis
+    - once all possible routes are mapped out by total time spend and sum of money robbed, we
+      will sort out the route with the highest amount robbed (since this is our main goal as robbers)
+- A corolary of our conditions above means that our optimized list will have only banks whose time to travel
+    to from the origin is less than our maximum time traveled variable. Since these banks represent final banks robbed in any banks
+    this further accelerates the rate at which we reach the pool of optimized banks.
+- Regarding how we will keep track of paths taken:
+    - we're looking at remembering order of the path taken, essentially, a chain of past banks visited from
+      the point of view of any bank we're currently at in a path's analysis
+    - what we cannot do is use a set to transmit what we've visited in the past to the next bank we're iterating to
+    - we will use a list-compatible data format, such as a character-seperated string sequence (A-B-C-D-E), or a list
+    - to avoid any method arguments conflict with lists, we'll pass along a character-seperated string sequence, while
+      exctracting its chained banks into a set at each iteration to make sure we don't re-iterate over a bank we've already
+      visited
+
+
+DESCRIPTION OF MAJOR STEPS:
+
+- first, we will optimize our list of banks to consider based on the points above
+- second, we will build our graph with the optimized list of banks
+- we will perform depht-first searches for all paths from the extraction point (the origin) that take less than
+  the alocated time to rob banks, by passing through the origin's neighbors (via networkX)
+  - third, in order to speed things up, we will apply a divide-and-conquer approach over paths that go through 
+    the neighbors. 
+  - by considering how many threads are available to us, we will apply a small algorithm to determine
+    how many neighbors of the origin to pass to each thread. Starting with one each, we will assign as many to each thread
+    while trying to underwork the smallest number of threads possible.
+  - Once all processes have completed, we return the unsorted list
+- Fourth, we sort the list in descending order by money stolen, and extract the list's first element
+- Fifth, since the path contained in the most lucrative path returned is a string (A-B-C-D...)
+    - we split the string into a list of bank id's
+    - then since this list begins from the origin's neighbor, and since we want a list that begins at the bank we
+      should start at, we return the reverse of this list of bank id's.
+
+
+VARIABLES:
+
+A: time_threshold_for_edge_to_be_considered, float, representing the amount of hours we're willing to spend
+    travelling between banks, this value is fixed but can be changed by the user.
+B and C: since we're dealing with a considerable amount of banks to consider, the simplest approach is to
+    consider the:
+    -  B: "above average" banks in terms of worth, since we can be sure that robbing any number X banks that have
+        a worth above the average worth of all banks, will net us more money than robbing any number X banks that have
+        a less than average worth, regardless of time. Should we consider bellow-average banks, this will mean that we
+        would need to spend MORE time robbing, which could turn out not to be more time-efficient, or could perhaps
+        even increase the chance of us getting robbed.
+    -  C: "bellow average"  banks in terms of time spent robbing them, since while we want to rob as many banks as possible,
+        we also do not want to rob alot of banks needlessly or blindly. We want to get the biggest bang for our time spent,
+        so considering banks who take too long for our liking may not prove to be beneficial in the end.
+
+D: max number of banks before we start evaluating robbery paths set arbitrarily.
+
+A & D are fixed (set before algorithm begins and never changed), while B & C are dynamic (set at the beggining, but changed
+by optimization)
+
+
+HOW VARIABLES ARE USED:
+
+B and C are the only values optimized at each iteration. Since:
+- B represents vault worth, we will increase this factor at each iteration until we've found a number of banks bellow the 
+  value assigned to D
+- C represents time spent, we will decrease this factor at each iteration until we've found a number of banks bellow the
+  value assigned to D
+
 """
 
 """
 Global variables that can be tweaked:
 """
+# A
+# in h (hour)
 time_threshold_for_edge_to_be_considered = 0.5
-# The factor by which we multiply the mean of the values of time
-# it takes to rob a bank in order to get the min threshold to 
-# consider a bank as a node. The smaller this value, the more selective
-# we are with our options
-mean_time_factor=0.5
+# B
 # The factor by which we multiply the mean of the values of bank vaults
 # in order to get the min threshold to consider a bank as a node.
 # The higher this value, the richer our banks need to be for us
-# to consider them
+# to consider them. mean_money_factor_modifier is the step-up value
+# we use at each iteration optimization. these are in km.
 mean_money_factor=2.9
-
+mean_money_factor_modifier=0.05
+# C
+# The factor by which we multiply the mean of the values of time
+# it takes to rob a bank in order to get the min threshold to 
+# consider a bank as a node. The smaller this value, the more selective
+# we are with our options. mean_time_factor_modifier is the step-up value
+# we use at each iteration optimization. these are in h (hour).
+mean_time_factor=0.5
+mean_time_factor_modifier=0.025
+# D
+max_number_banks_we_can_consider=18
+#in h
+maximum_amount_of_time_for_any_given_path=24.0
+# Im km/h
+speed_at_which_we_travel_between_banks=30
 
 """
 a and b: [tuple(x, y)]: cartesian coordinates of two points
@@ -72,7 +174,6 @@ returns:
 """
 def consider_distance_as_edge(a, b, maxT, vel):
     dist = distance_two_points(a, b)
-    # print(dist)
     t = dist / vel
     return None if t > maxT else t
 
@@ -81,6 +182,13 @@ def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
+"""
+
+METHODS TO DECIDE HOW MANY PROCESSES TO CREATE
+AND HOW MANY DFS STARTING POINTS TO PASS TO EACH
+
+"""
 
 """
 Defaults to leaving 1 core thread free 
@@ -105,18 +213,8 @@ def groups_to_split_origin_neighbors_into(size_batch):
     else: return 1
 
 """
-MARK - GRAPH CLASSES
+MARK - GRAPH CLASS
 """
-
-class Bank:
-    
-    def __init__(self, _id, data=None):
-        self._id = _id
-        if data is not None:
-            self.money = data.money
-            self.time = data.time
-        return
-
 class Graph:
 
     completed = 0
@@ -139,12 +237,9 @@ class Graph:
                 weight=(0.0 if data is None else data['time']),
                 money=data['money']
             )
-            # self.nodes[node] = data['money']
 
     def new_edge(self, A, B, t):
-        # print(A, B)
         if self.G.has_edge(A, B) is False and self.G.has_edge(B, A) is False:
-            # print(A, B, t)
             self.G.add_edge(A, B, weight=t)
         if str(A) == 'o' and str(B) != 'o':
             self.origin_neighors.add(B)
@@ -157,17 +252,41 @@ class Graph:
     def neighbors_of_origin(self):
         return list(self.origin_neighors)
 
+    """
+    The method we pass to each worker process
+    than: max weight of a path
+    grouping: the group of origin's neighbors to work from
+    update_counts: a convenience method to print how many origin-neighbor groups we've completed
+    """
     def execute_sub_grouping(self, than, grouping, update_counts):
         results = []
+        """
+        The depth-first-search method
+        A: point we're at
+        B: counter-point on the edge we're evaluating
+        totat: total time spent on path so far
+        amount: total amount stolen so far
+        nodes: the hyphen-delimited string indicating nodes already visited (a-b-c-d-e..)
+        """
         def run_edge(A, B, total=0,  amount=0, nodes=''):
             edge = self.G.get_edge_data(A,B)
             bWeight = self.G.nodes[B].get('node_weight', 1)
             next_total = edge['weight'] + bWeight + total
+            # We sum up the money accumulated plus value of B
             next_amount = amount + self.G.nodes[B]['money']
+            """
+            If this sum remains unchanged, we've hit a 
+            dead-end and should not proceed further than
+            A
+            """
             if next_total == total:
                 results.append((nodes, amount))
                 return
-            elif next_total < than:
+            elif next_total < than: #otherwise continue
+                """
+                assign B's neighbors to a set, only iterate beyond B
+                on its neighbors not already visited, "successors"
+                """
                 neighbors = set()
                 for node in self.G.neighbors(B):
                     if A != node and str(node) not in nodes:
@@ -189,8 +308,12 @@ class Graph:
             else:
                 results.append((nodes, amount))
                 return
-
+        
         for item in grouping:
+            """
+            We run the dfs method on the origin's neighbor
+            then update the count of total neighors completed
+            """
             run_edge('o', item, total=0.0, nodes="o")
             update_counts()
         return results
@@ -232,7 +355,6 @@ class Graph:
                     results_sublists.append(data)
                 except Exception as exc:
                     print('%r generated an exception: %s' % (paths_results, exc))
-
         print("Flattening the results")
         results = []
         for sublist in results_sublists:
@@ -250,12 +372,17 @@ def determine_edges_to_origin(df):
             (row.x_coordinate, row.y_coordinate), 
             (0,0), 
             time_threshold_for_edge_to_be_considered, 
-            30
+            speed_at_which_we_travel_between_banks
         )
         return -1 if edge is None else edge
     df['or'] = df.apply(lambda_origin, axis=1)
 
-def filter_out_banks_with_means(df, mean_money_f=1.0, mean_time_f=0.5):
+"""
+Method to filter out banks that meet our current optimization filters
+
+df: [Dataframe]
+"""
+def filter_out_banks_with_means(df):
     mean = df.mean()
     dfc = df.copy()
     mean_money = mean['money'] * mean_money_factor
@@ -270,9 +397,15 @@ def filter_out_banks_with_means(df, mean_money_f=1.0, mean_time_f=0.5):
     return to_use
 
 """
-Takes in the filtered dataframe, iterates over the bank id's,
-then operates each iteration on the original dataframe from the .csv
-file.
+Method that only applies edges that meet our time constraint over time spent traveling
+between banks
+
+We iterate over every 2-bank combinations, and evaluate wether the time spent over the
+distance seperating them meets our optimization criteria.
+
+consider_distance_as_edge returns None if an edge does not meet this criteria, this
+edge is then added to our networkX graph if the value returned is not None
+
 options: [Dataframe]: filtered
 df: [Dataframe]: original
 graph: [Graph]: the graph class we'll be using
@@ -291,8 +424,8 @@ def iterate_and_apply_valid_edges(options, df, graph):
         edge = consider_distance_as_edge(
             (df.iloc[A, 1], df.iloc[A, 2]), 
             (df.iloc[B, 1], df.iloc[B, 2]), 
-            0.3, 
-            30
+            time_threshold_for_edge_to_be_considered, 
+            speed_at_which_we_travel_between_banks
         )
         if edge is not None:
             # Add edges and nodes only if the nodes 
@@ -326,7 +459,8 @@ def sort_paths_by_sum_robbed(paths):
 def return_best_path_of_banks(paths):
     sort_paths_by_sum_robbed(paths)
     first = paths[0][0].split('-')[1:]
-    # We rebuild the array of integers from the array of strings
+    # We rebuild the array of integers from the reversed array of strings
+    # since we started our path analyses from the extraction point
     return [int(i) for i in first][::-1]
 
 """
@@ -334,32 +468,38 @@ df: [string]: path to the file
 """
 def robber_algorithm(path):
 
+    # First step
     df = pd.read_csv(path)
     determine_edges_to_origin(df)
     graph = Graph()
 
     def optimize_factors():
+        global mean_time_factor
+        global mean_money_factor
+        global max_number_banks_we_can_consider
         to_use = filter_out_banks_with_means(
             df
         )
+        # Second step applied as many times as needed
         iterate_and_apply_valid_edges(to_use, df, graph)
-        if len(graph.neighbors_of_origin()) < 18: return
+        # Where we check to see if our pool of banks meets our boundaris to be able to
+        # complete this analysis in under 3 minutes
+        if len(graph.neighbors_of_origin()) < max_number_banks_we_can_consider: return
         else:
             print("Optimizing our selection criteria to narrow our options..")
             print(" ")
             print(" ")
             print(" ")
             print(" ")
-            global mean_time_factor
-            global mean_money_factor
             mean_time_factor -= 0.025
             mean_money_factor += 0.05
             graph.new_graph()
             return optimize_factors()
 
     optimize_factors()
-
-    paths = graph.paths_with_time_less(24.0)
+    # Third step
+    paths = graph.paths_with_time_less(maximum_amount_of_time_for_any_given_path)
+    # Fourth and Fifth
     result = return_best_path_of_banks(paths)
     print("The ideal path would be :")
     print(result)
