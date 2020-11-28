@@ -49,4 +49,5 @@ def check_solution(travel_list, df, speed=30.):
         f"Distance to (0,0) helipad: {dist}\n"
     )
     print(f"Time Remaining: {final_t}")
+    print(score, "is the amount of money")
     return score

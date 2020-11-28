@@ -340,12 +340,10 @@ class Graph:
         """
         neighs = neighs_arg if neighs_arg is not None else self.neighbors_of_origin()
         results_sublists = []
-        # print(len(neighs), "neighbors to origin")
         print("The exit helicopter zone can be reached from {neig} neighboring banks".format(neig=len(neighs)))
         divided_neighbors = split_list_for_multiprocess(
             neighs
         )
-        # print("Spliting up the neighbors into groups of {spli}".format(spli=groups_to_split_origin_neighbors_into(len(neighs))))
         print("These are the divided neighbors to origin accross {cpus} processes:".format(cpus=ideal_number_of_processes()))
         print(divided_neighbors)
         print("And we have {edges} edges to evaluate".format(edges=len(self.G.edges)))
@@ -475,7 +473,6 @@ def return_best_path_of_banks(paths):
     first = paths[0][0].split('-')[1:]
     sum_money = paths[0][1]
     print("total money robbed", sum_money)
-
     # We rebuild the array of integers from the reversed array of strings
     # since we started our path analyses from the extraction point
     return [int(i) for i in first][::-1]
@@ -501,8 +498,6 @@ def robber_algorithm(path):
         max_number_of_banks_to_consider()
     )
     
-
-
     def optimize_factors():
         global mean_time_factor
         global mean_money_factor
@@ -530,7 +525,7 @@ def robber_algorithm(path):
     paths = graph.paths_with_time_less(maximum_amount_of_time_for_any_given_path)
     # Fourth and Fifth
     result = return_best_path_of_banks(paths)
-    print("The ideal path would be :")
+    print("Our optimized path would be:")
     print(result)
     print("Checking result..")
     return result
